@@ -60,9 +60,11 @@ RUN conda install -y pytorch-nightly -c pytorch  \
  && conda clean -ya
 
 # Install TorchVision master
+WORKDIR /app
 RUN git clone https://github.com/pytorch/vision.git \
  && cd vision \
- && python setup.py install
+ && python setup.py install \
+ && cd .. && rm -rf vision
 
 # Set the default command to python3
 CMD ["python3"]
