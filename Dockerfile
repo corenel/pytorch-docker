@@ -1,22 +1,25 @@
-FROM nvidia/cuda:9.0-base-ubuntu16.04
+ARG CUDA="9.0"
+ARG CUDNN="7"
 
-# Install some basic utilities
-RUN sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
-# temporary fix for GPG error
-RUN rm /etc/apt/sources.list.d/cuda.list
-RUN apt-get update && apt-get install -y --fix-missing \
-    curl \
-    ca-certificates \
-    sudo \
-    git \
-    bzip2 \
-    libx11-6 \
-    build-essential \
- && rm -rf /var/lib/apt/lists/*
+FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu16.04
+
+# Enable repository mirrors for China
+ARG USE_MIRROR="true"
+ARG BUILD_NIGHTLY="false"
+ARG PYTORCH_VERSION=1.0.0
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
+RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
+
+# Install basic utilities
+RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list ; fi
+RUN apt-get update -y \
+ && apt-get install -y curl ca-certificates sudo git curl bzip2 \
+ && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
+ && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev
 
 # Create a working directory
 RUN mkdir -p /app/code
-WORKDIR /app/code
 
 # Create a non-root user and switch to it
 RUN adduser --disabled-password --gecos '' --shell /bin/bash user \
@@ -34,40 +37,44 @@ RUN curl -so ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-lates
  && ~/miniconda.sh -b -p ~/miniconda \
  && rm ~/miniconda.sh
 ENV PATH=/home/user/miniconda/bin:$PATH
-ENV CONDA_AUTO_UPDATE_CONDA=false
 
 # Create a Python 3.5 environment
-RUN /home/user/miniconda/bin/conda install conda-build \
+RUN /home/user/miniconda/bin/conda install -y conda-build \
  && /home/user/miniconda/bin/conda create -y --name py35 python=3.5.6 \
  && /home/user/miniconda/bin/conda clean -ya
 ENV CONDA_DEFAULT_ENV=py35
 ENV CONDA_PREFIX=/home/user/miniconda/envs/$CONDA_DEFAULT_ENV
 ENV PATH=$CONDA_PREFIX/bin:$PATH
+ENV CONDA_AUTO_UPDATE_CONDA=false
 
-# use USTC anaconda mirror
-RUN conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/free/ \
- && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/main/ \
- && conda config --set show_channel_urls yes
+# Use USTC anaconda mirror
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
+  conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/free/ \
+  && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/main/ \
+  && conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/ \
+  && conda config --set show_channel_urls yes ; \
+ fi
 
-# CUDA 9.2-specific steps
-RUN conda install -y -c pytorch \
-    cuda90=1.0 \
-    magma-cuda90=2.3.0 \
-    pytorch=0.4.1 \
-    torchvision=0.2.1 \
- && conda clean -ya
+# Install other python dependencies
+RUN conda install -y ipython
+RUN pip install lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python
 
-# Install OpenCV3 Python bindings
-RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-    libgtk2.0-0 \
-    libcanberra-gtk-module \
- && sudo rm -rf /var/lib/apt/lists/*
-RUN conda config --add channels https://mirrors.ustc.edu.cn/anaconda/cloud/menpo/ \
- && conda install -y -c menpo opencv3 \
- && conda clean -ya
+# Install PyTorch 1.0 Nightly and OpenCV
+RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
+  conda install -y pytorch-nightly -c pytorch  \
+  && conda clean -ya ; \ 
+ else \
+  conda install -y pytorch=="${PYTORCH_VERSION}" -c pytorch  \
+  && conda clean -ya ; \ 
+ fi
 
-# Install other python dependencie
-RUN pip install six lmdb tqdm click numpy pillow easydict tensorboardX scipy
+# Install TorchVision master
+WORKDIR /app
+RUN git clone https://github.com/pytorch/vision.git \
+ && cd vision \
+ && python setup.py install \
+ && cd .. && rm -rf vision
 
 # Set the default command to python3
 CMD ["python3"]
+WORKDIR /app/code
