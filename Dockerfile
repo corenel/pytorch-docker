@@ -14,9 +14,10 @@ RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list ; fi
 RUN apt-get update -y \
- && apt-get install -y curl ca-certificates sudo git curl bzip2 \
+ && apt-get install -y curl ca-certificates sudo git curl bzip2 wget \
  && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
- && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev
+ && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev \
+ && apt-get install -y libjpeg-dev libpng-dev
 
 # Create a working directory
 RUN mkdir -p /app/code
@@ -51,21 +52,26 @@ ENV CONDA_AUTO_UPDATE_CONDA=false
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
   conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/free/ \
   && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/main/ \
+  && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge/ \
   && conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/ \
   && conda config --set show_channel_urls yes ; \
  fi
 
 # Install other python dependencies
 RUN conda install -y ipython
+RUN pip install -U pip
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
+  pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
+ fi
 RUN pip install lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python
 
 # Install PyTorch 1.0 Nightly and OpenCV
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
   conda install -y pytorch-nightly -c pytorch  \
-  && conda clean -ya ; \ 
+  && conda clean -ya ; \
  else \
   conda install -y pytorch=="${PYTORCH_VERSION}" -c pytorch  \
-  && conda clean -ya ; \ 
+  && conda clean -ya ; \
  fi
 
 # Install TorchVision master
@@ -75,6 +81,61 @@ RUN git clone https://github.com/pytorch/vision.git \
  && python setup.py install \
  && cd .. && rm -rf vision
 
+# Install OpenMPI
+USER root
+RUN mkdir /tmp/openmpi && \
+    cd /tmp/openmpi && \
+    wget https://www.open-mpi.org/software/ompi/v3.1/downloads/openmpi-3.1.2.tar.gz && \
+    tar zxf openmpi-3.1.2.tar.gz && \
+    cd openmpi-3.1.2 && \
+    ./configure --enable-orterun-prefix-by-default && \
+    make -j $(nproc) all && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/openmpi
+
+# Create a wrapper for OpenMPI to allow running as root by default
+RUN mv /usr/local/bin/mpirun /usr/local/bin/mpirun.real && \
+    echo '#!/bin/bash' > /usr/local/bin/mpirun && \
+    echo 'mpirun.real --allow-run-as-root "$@"' >> /usr/local/bin/mpirun && \
+    chmod a+x /usr/local/bin/mpirun
+
+# Configure OpenMPI to run good defaults:
+#   --bind-to none --map-by slot --mca btl_tcp_if_exclude lo,docker0
+RUN echo "hwloc_base_binding_policy = none" >> /usr/local/etc/openmpi-mca-params.conf && \
+    echo "rmaps_base_mapping_policy = slot" >> /usr/local/etc/openmpi-mca-params.conf && \
+    echo "btl_tcp_if_exclude = lo,docker0" >> /usr/local/etc/openmpi-mca-params.conf
+
+# Set default NCCL parameters
+RUN echo NCCL_DEBUG=INFO >> /etc/nccl.conf
+
+# Install OpenSSH for MPI to communicate between containers
+RUN apt-get install -y --no-install-recommends openssh-client openssh-server gosu && \
+    mkdir -p /var/run/sshd
+
+# Allow OpenSSH to talk to containers without asking for confirmation
+RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_config.new && \
+    echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config.new && \
+    mv /etc/ssh/ssh_config.new /etc/ssh/ssh_config
+
+# Setup root and user login
+RUN echo 'root:screencast' | chpasswd
+RUN echo 'user:user' | chpasswd
+RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+ENV NOTVISIBLE "in users profile"
+RUN echo "export VISIBLE=now" >> /etc/profile
+EXPOSE 22
+
+# Fix locale
+RUN apt-get update && apt-get install -y locales
+RUN echo "LC_ALL=en_US.UTF-8" >> /etc/environment
+RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+RUN echo "LANG=en_US.UTF-8" > /etc/locale.conf
+RUN locale-gen en_US.UTF-8
+
 # Set the default command to python3
-CMD ["python3"]
 WORKDIR /app/code
+ENTRYPOINT ["/app/code/entrypoint.sh"]
