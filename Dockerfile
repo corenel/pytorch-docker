@@ -136,6 +136,11 @@ RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 RUN echo "LANG=en_US.UTF-8" > /etc/locale.conf
 RUN locale-gen en_US.UTF-8
 
+# Install Horovod, temporarily using CUDA stubs
+RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \
+    /sbin/ldconfig
+
 # Set the default command to python3
 WORKDIR /app/code
 ENTRYPOINT ["/app/code/entrypoint.sh"]
