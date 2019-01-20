@@ -17,7 +17,8 @@ RUN apt-get update -y \
  && apt-get install -y curl ca-certificates sudo git curl bzip2 wget \
  && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
  && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev \
- && apt-get install -y libjpeg-dev libpng-dev
+ && apt-get install -y libjpeg-dev libpng-dev \
+ && apt-get install -y libibverbs-dev
 
 # Create a working directory
 RUN mkdir -p /app/code
@@ -138,8 +139,8 @@ RUN locale-gen en_US.UTF-8
 
 # Install Horovod, temporarily using CUDA stubs
 RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
-    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir horovod && \
-    /sbin/ldconfig
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir git+https://github.com/uber/horovod.git#egg=horovod && \
+    ldconfig
 
 # Set the default command to python3
 WORKDIR /app/code
