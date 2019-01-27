@@ -7,6 +7,7 @@ FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu16.04
 ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
 ARG PYTORCH_VERSION=1.0.0
+ARG PYTHON_VERSION=3.5
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
 
@@ -18,7 +19,13 @@ RUN apt-get update -y \
  && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
  && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev \
  && apt-get install -y libjpeg-dev libpng-dev \
- && apt-get install -y libibverbs-dev
+ && apt-get install -y libibverbs-dev \
+ && apt-get install -y python${PYTHON_VERSION} \
+ && apt-get install -y python${PYTHON_VERSION}-dev
+RUN ln -sf /usr/bin/python${PYTHON_VERSION} /usr/bin/python
+RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
+    python get-pip.py && \
+    rm get-pip.py
 
 # Create a working directory
 RUN mkdir -p /app/code
@@ -27,52 +34,23 @@ RUN mkdir -p /app/code
 RUN adduser --disabled-password --gecos '' --shell /bin/bash user \
  && chown -R user:user /app
 RUN echo "user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-user
-USER user
 
 # All users can use /home/user as their home directory
 ENV HOME=/home/user
-RUN chmod 777 /home/user
-
-# Install Miniconda
-RUN curl -so ~/miniconda.sh https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh \
- && chmod +x ~/miniconda.sh \
- && ~/miniconda.sh -b -p ~/miniconda \
- && rm ~/miniconda.sh
-ENV PATH=/home/user/miniconda/bin:$PATH
-
-# Create a Python 3.5 environment
-RUN /home/user/miniconda/bin/conda install -y conda-build \
- && /home/user/miniconda/bin/conda create -y --name py35 python=3.5.6 \
- && /home/user/miniconda/bin/conda clean -ya
-ENV CONDA_DEFAULT_ENV=py35
-ENV CONDA_PREFIX=/home/user/miniconda/envs/$CONDA_DEFAULT_ENV
-ENV PATH=$CONDA_PREFIX/bin:$PATH
-ENV CONDA_AUTO_UPDATE_CONDA=false
-
-# Use USTC anaconda mirror
-RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
-  conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/free/ \
-  && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/pkgs/main/ \
-  && conda config --add channels https://mirrors.ustc.edu.cn/anaconda/cloud/conda-forge/ \
-  && conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/ \
-  && conda config --set show_channel_urls yes ; \
- fi
+# RUN chmod 777 /home/user
 
 # Install other python dependencies
-RUN conda install -y ipython
-RUN pip install -U pip
+RUN pip install ipython
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
   pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
  fi
-RUN pip install lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python
+RUN pip install lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py
 
 # Install PyTorch 1.0 Nightly and OpenCV
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
-  conda install -y pytorch-nightly -c pytorch  \
-  && conda clean -ya ; \
+  pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html ; \
  else \
-  conda install -y pytorch=="${PYTORCH_VERSION}" -c pytorch  \
-  && conda clean -ya ; \
+  pip install torch==${PYTORCH_VERSION} ; \
  fi
 
 # Install TorchVision master
@@ -83,7 +61,6 @@ RUN git clone https://github.com/pytorch/vision.git \
  && cd .. && rm -rf vision
 
 # Install OpenMPI
-USER root
 RUN mkdir /tmp/openmpi && \
     cd /tmp/openmpi && \
     wget https://www.open-mpi.org/software/ompi/v3.1/downloads/openmpi-3.1.2.tar.gz && \
@@ -123,6 +100,7 @@ RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_confi
 RUN echo 'root:screencast' | chpasswd
 RUN echo 'user:user' | chpasswd
 RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+RUN sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/g' /etc/ssh/sshd_config
 
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
