@@ -6,7 +6,7 @@ FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu16.04
 # Enable repository mirrors for China
 ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
-ARG PYTORCH_VERSION=1.0.0
+ARG PYTORCH_VERSION=1.0.1
 ARG PYTHON_VERSION=3.5
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
@@ -44,7 +44,7 @@ RUN pip install ipython
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
   pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
  fi
-RUN pip install lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py
+RUN pip install 'numpy<1.15.0' lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py
 
 # Install PyTorch 1.0 Nightly and OpenCV
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
@@ -117,7 +117,7 @@ RUN locale-gen en_US.UTF-8
 
 # Install Horovod, temporarily using CUDA stubs
 RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
-    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir git+https://github.com/uber/horovod.git#egg=horovod && \
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir git+https://github.com/horovod/horovod.git#egg=horovod && \
     ldconfig
 
 # Set the default command to python3
