@@ -8,6 +8,7 @@ ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
 ARG PYTORCH_VERSION=1.0.1
 ARG PYTHON_VERSION=3.5
+ARG HOROVOD_VERSION=0.16.1
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
 
@@ -63,29 +64,14 @@ RUN git clone https://github.com/pytorch/vision.git \
 # Install OpenMPI
 RUN mkdir /tmp/openmpi && \
     cd /tmp/openmpi && \
-    wget https://www.open-mpi.org/software/ompi/v3.1/downloads/openmpi-3.1.2.tar.gz && \
-    tar zxf openmpi-3.1.2.tar.gz && \
-    cd openmpi-3.1.2 && \
+    wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.0.tar.gz && \
+    tar zxf openmpi-4.0.0.tar.gz && \
+    cd openmpi-4.0.0 && \
     ./configure --enable-orterun-prefix-by-default && \
     make -j $(nproc) all && \
     make install && \
     ldconfig && \
     rm -rf /tmp/openmpi
-
-# Create a wrapper for OpenMPI to allow running as root by default
-RUN mv /usr/local/bin/mpirun /usr/local/bin/mpirun.real && \
-    echo '#!/bin/bash' > /usr/local/bin/mpirun && \
-    echo 'mpirun.real --allow-run-as-root "$@"' >> /usr/local/bin/mpirun && \
-    chmod a+x /usr/local/bin/mpirun
-
-# Configure OpenMPI to run good defaults:
-#   --bind-to none --map-by slot --mca btl_tcp_if_exclude lo,docker0
-RUN echo "hwloc_base_binding_policy = none" >> /usr/local/etc/openmpi-mca-params.conf && \
-    echo "rmaps_base_mapping_policy = slot" >> /usr/local/etc/openmpi-mca-params.conf && \
-    echo "btl_tcp_if_exclude = lo,docker0" >> /usr/local/etc/openmpi-mca-params.conf
-
-# Set default NCCL parameters
-RUN echo NCCL_DEBUG=INFO >> /etc/nccl.conf
 
 # Install OpenSSH for MPI to communicate between containers
 RUN apt-get install -y --no-install-recommends openssh-client openssh-server gosu && \
@@ -117,7 +103,7 @@ RUN locale-gen en_US.UTF-8
 
 # Install Horovod, temporarily using CUDA stubs
 RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
-    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install --no-cache-dir git+https://github.com/horovod/horovod.git#egg=horovod && \
+    HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install -U horovod==${HOROVOD_VERSION} && \
     ldconfig
 
 # Set the default command to python3
