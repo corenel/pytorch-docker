@@ -6,7 +6,8 @@ FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu16.04
 # Enable repository mirrors for China
 ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
-ARG PYTORCH_VERSION=1.0.1
+ARG PYTORCH_VERSION=1.1.0
+ENV TORCHVISION_VERSION=0.2.2.post3
 ARG PYTHON_VERSION=3.5
 ARG HOROVOD_VERSION=0.16.1
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
@@ -14,7 +15,10 @@ RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly
 
 # Install basic utilities
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list ; fi
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
+ sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list \
+ && sed -i 's/http:\/\/mirrors.ustc.edu.cn/https:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
+ fi
 RUN apt-get update -y \
  && apt-get install -y curl ca-certificates sudo git curl bzip2 wget \
  && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
@@ -56,10 +60,14 @@ RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
 
 # Install TorchVision master
 WORKDIR /app
-RUN git clone https://github.com/pytorch/vision.git \
- && cd vision \
- && python setup.py install \
- && cd .. && rm -rf vision
+RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
+  git clone https://github.com/pytorch/vision.git \
+  && cd vision \
+  && python setup.py install \
+  && cd .. && rm -rf vision \
+ else \
+  pip install torchvision==${TORCHVISION_VERSION} ; \
+ fi
 
 # Install OpenMPI
 RUN mkdir /tmp/openmpi && \
@@ -108,4 +116,5 @@ RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
 
 # Set the default command to python3
 WORKDIR /app/code
+COPY entrypoint.sh .
 ENTRYPOINT ["/app/code/entrypoint.sh"]
