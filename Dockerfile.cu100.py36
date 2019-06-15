@@ -1,6 +1,6 @@
-ARG CUDA="9.0"
+ARG CUDA="10.1"
 ARG CUDNN="7"
-ARG UBUNTU="16.04"
+ARG UBUNTU="18.04"
 
 FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu${UBUNTU}
 
@@ -9,7 +9,7 @@ ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
 ARG PYTORCH_VERSION=1.1.0
 ENV TORCHVISION_VERSION=0.2.2.post3
-ARG PYTHON_VERSION=3.5
+ARG PYTHON_VERSION=3
 ARG HOROVOD_VERSION=0.16.1
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
@@ -21,7 +21,7 @@ RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
  && sed -i 's/http:\/\/mirrors.ustc.edu.cn/https:\/\/mirrors.ustc.edu.cn/g' /etc/apt/sources.list; \
  fi
 RUN apt-get update -y \
- && apt-get install -y curl ca-certificates sudo git curl bzip2 wget rsync\
+ && apt-get install -y curl ca-certificates sudo git curl bzip2 wget rsync \
  && apt-get install -y build-essential cmake tree htop bmon iotop g++ \
  && apt-get install -y libx11-6 libglib2.0-0 libsm6 libxext6 libxrender-dev \
  && apt-get install -y libjpeg-dev libpng-dev \
@@ -50,7 +50,7 @@ RUN pip install ipython
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
   pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
  fi
-RUN pip install 'numpy<1.15.0' lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib==3.0.3 opencv-python h5py
+RUN pip install 'numpy<1.15.0' lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py
 
 # Install PyTorch 1.0 Nightly and OpenCV
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
