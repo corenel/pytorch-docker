@@ -7,10 +7,10 @@ FROM nvidia/cuda:${CUDA}-cudnn${CUDNN}-devel-ubuntu${UBUNTU}
 # Enable repository mirrors for China
 ARG USE_MIRROR="true"
 ARG BUILD_NIGHTLY="false"
-ARG PYTORCH_VERSION=1.1.0
-ENV TORCHVISION_VERSION=0.2.2.post3
-ARG PYTHON_VERSION=3
-ARG HOROVOD_VERSION=0.16.1
+ARG PYTORCH_VERSION=1.2.0
+ENV TORCHVISION_VERSION=0.4.0
+ARG PYTHON_VERSION=3.6
+ARG HOROVOD_VERSION=0.17.1
 RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then echo "Use mirrors"; fi
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then echo "Build with pytorch-nightly"; fi
 
@@ -28,6 +28,9 @@ RUN apt-get update -y \
  && apt-get install -y libibverbs-dev \
  && apt-get install -y python${PYTHON_VERSION} \
  && apt-get install -y python${PYTHON_VERSION}-dev
+RUN if [ "${PYTHON_VERSION}" = "3.6" ] ; then \
+        apt-get install -y python${PYTHON_VERSION}-distutils; \
+    fi
 RUN ln -sf /usr/bin/python${PYTHON_VERSION} /usr/bin/python
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     python get-pip.py && \
@@ -111,7 +114,7 @@ RUN echo "LANG=en_US.UTF-8" > /etc/locale.conf
 RUN locale-gen en_US.UTF-8
 
 # Install Horovod, temporarily using CUDA stubs
-RUN ldconfig /usr/local/cuda-9.0/targets/x86_64-linux/lib/stubs && \
+RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install -U horovod==${HOROVOD_VERSION} && \
     ldconfig
 
