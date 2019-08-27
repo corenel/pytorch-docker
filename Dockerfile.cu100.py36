@@ -35,6 +35,10 @@ RUN ln -sf /usr/bin/python${PYTHON_VERSION} /usr/bin/python
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     python get-pip.py && \
     rm get-pip.py
+RUN pip install -U pip
+RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
+  pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
+ fi
 
 # Create a working directory
 RUN mkdir -p /app/code
@@ -46,31 +50,24 @@ RUN echo "user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-user
 
 # All users can use /home/user as their home directory
 ENV HOME=/home/user
+WORKDIR /app
 # RUN chmod 777 /home/user
 
-# Install other python dependencies
-RUN pip install ipython
-RUN if [ "x${USE_MIRROR}" = "xtrue" ] ; then \
-  pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
- fi
-RUN pip install 'numpy<1.15.0' lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py
-
-# Install PyTorch 1.0 Nightly and OpenCV
+# Install PyTorch
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
-  pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu90/torch_nightly.html ; \
+  pip install torch_nightly -f https://download.pytorch.org/whl/nightly/cu100/torch_nightly.html ; \
  else \
-  pip install torch==${PYTORCH_VERSION} ; \
+  pip install https://download.pytorch.org/whl/cu100/torch-${PYTORCH_VERSION}-$(python -c "import wheel.pep425tags as w; print('-'.join(w.get_supported()[0][:-1]))")-manylinux1_x86_64.whl ; \
  fi
 
-# Install TorchVision master
-WORKDIR /app
+# Install TorchVision
 RUN if [ "x${BUILD_NIGHTLY}" = "xtrue" ] ; then \
   git clone https://github.com/pytorch/vision.git \
   && cd vision \
   && python setup.py install \
-  && cd .. && rm -rf vision \
+  && cd .. && rm -rf vision ; \
  else \
-  pip install torchvision==${TORCHVISION_VERSION} ; \
+  pip install https://download.pytorch.org/whl/cu100/torchvision-${TORCHVISION_VERSION}-$(python -c "import wheel.pep425tags as w; print('-'.join(w.get_supported()[0][:-1]))")-manylinux1_x86_64.whl ; \
  fi
 
 # Install OpenMPI
@@ -117,6 +114,11 @@ RUN locale-gen en_US.UTF-8
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 pip install -U horovod==${HOROVOD_VERSION} && \
     ldconfig
+
+# Install other python dependencies
+RUN pip install ipython
+RUN pip install future typing
+RUN pip install numpy lmdb tqdm click pillow easydict tensorboardX scipy scikit-image scikit-learn ninja yacs cython matplotlib opencv-python h5py comet_ml
 
 # Set the default command to python3
 WORKDIR /app/code
